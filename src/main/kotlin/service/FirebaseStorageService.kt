@@ -8,10 +8,11 @@ import java.util.UUID
 
 object FirebaseStorageService {
 
-    private val bucketName = "trobat-40cea.firebasestorage.app"
+    private val bucketName: String
+        get() = System.getenv("FIREBASE_STORAGE_BUCKET") ?: "trobat-40cea.firebasestorage.app"
 
     fun uploadImage(imageBytes: ByteArray, contentType: String = "image/jpeg"): String {
-        val fileName = "reportes/${UUID.randomUUID()}.jpg"
+        val fileName = "casos/${UUID.randomUUID()}.jpg"
         val downloadToken = UUID.randomUUID().toString()
 
         val bucket = StorageClient.getInstance().bucket(bucketName)
