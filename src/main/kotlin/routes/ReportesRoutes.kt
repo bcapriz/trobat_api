@@ -185,34 +185,7 @@ fun Application.configureReportesRouting() {
                     }
                 }
 
-                // --- SOLO OFICIAL: asignar prioridad ---
-                patch("/{id}/prioridad") {
-                    if (!call.verificarRol("oficial")) return@patch
-
-                    val id = call.parameters["id"]
-                        ?: return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("ID requerido"))
-                    if (!ObjectId.isValid(id))
-                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("ID inválido"))
-
-                    val req = try {
-                        call.receive<PriorizarReporteRequest>()
-                    } catch (e: Exception) {
-                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("Cuerpo inválido"))
-                    }
-
-                    val result = reportes.updateOne(
-                        Filters.eq("_id", ObjectId(id)),
-                        Updates.set("police_priority", req.police_priority)
-                    )
-
-                    if (result.matchedCount == 0L) call.respond(HttpStatusCode.NotFound, MensajeResponse("Reporte no encontrado"))
-                    else {
-                        val estado = if (req.police_priority) "priorizado" else "sin prioridad"
-                        call.respond(MensajeResponse("Reporte $estado exitosamente"))
-                    }
-                }
-
-                // --- SOLO OFICIAL: validar reporte ---
+                // --- SOLO OFICIAL: validar y asignar priority ---
                 patch("/{id}/validar") {
                     if (!call.verificarRol("oficial")) return@patch
 
@@ -227,16 +200,19 @@ fun Application.configureReportesRouting() {
                         return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("Cuerpo inválido"))
                     }
 
-                    val result = reportes.updateOne(
-                        Filters.eq("_id", ObjectId(id)),
-                        Updates.set("validated", req.validated)
-                    )
+                    val validPriorities = setOf("high", "medium", "discarded", null)
+                    if (req.priority !in validPriorities)
+                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("Prioridad inválida"))
+
+                    val update = if (req.priority != null)
+                        Updates.combine(Updates.set("validated", req.validated), Updates.set("priority", req.priority))
+                    else
+                        Updates.combine(Updates.set("validated", req.validated), Updates.unset("priority"))
+
+                    val result = reportes.updateOne(Filters.eq("_id", ObjectId(id)), update)
 
                     if (result.matchedCount == 0L) call.respond(HttpStatusCode.NotFound, MensajeResponse("Reporte no encontrado"))
-                    else {
-                        val estado = if (req.validated) "validado" else "invalidado"
-                        call.respond(MensajeResponse("Reporte $estado exitosamente"))
-                    }
+                    else call.respond(MensajeResponse("Reporte ${if (req.validated) "validado" else "revertido a pendiente"} exitosamente"))
                 }
             }
         }
@@ -265,6 +241,10 @@ private fun Document.toReporteCasoResponse(): ReporteCasoResponse {
         }
     }
 
+    val validated = getBoolean("validated") ?: getBoolean("validado") ?: false
+    val priority = getString("priority")
+        ?: if (getBoolean("police_priority") == true || getBoolean("prioridad_policial") == true) "high" else null
+
     return ReporteCasoResponse(
         id = getObjectId("_id").toHexString(),
         case_id = caseId,
@@ -276,7 +256,6 @@ private fun Document.toReporteCasoResponse(): ReporteCasoResponse {
         timestamp = getDate("timestamp")?.toInstant()?.toString()
             ?: get("timestamp")?.toString()
             ?: "",
-        police_priority = getBoolean("police_priority") ?: getBoolean("prioridad_policial") ?: false,
         description = getString("description") ?: getString("descripcion") ?: "",
         photo_url = getString("photo_url") ?: getString("foto_url"),
         security_metadata = SecurityMetadata(
@@ -287,6 +266,7 @@ private fun Document.toReporteCasoResponse(): ReporteCasoResponse {
             phone = contactDoc.getString("phone") ?: contactDoc.getString("telefono"),
             email = contactDoc.getString("email")
         ),
-        validated = getBoolean("validated") ?: getBoolean("validado") ?: false
+        validated = validated,
+        priority = priority
     )
 }
