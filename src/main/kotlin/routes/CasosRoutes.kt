@@ -4,16 +4,21 @@ import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates
 import com.trobatapp.casos
 import com.trobatapp.models.*
+import com.trobatapp.service.FirebaseStorageService
 import com.trobatapp.utils.GeocodingUtil
 import com.trobatapp.utils.verificarRol
 import io.ktor.http.*
+import io.ktor.http.content.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import org.bson.Document
 import org.bson.types.ObjectId
 import java.time.Instant
@@ -114,10 +119,35 @@ fun Application.configureCasosRouting() {
                 post {
                     if (!call.verificarRol("oficial")) return@post
 
-                    val req = try {
-                        call.receive<CrearCasoRequest>()
+                    var fotoBytes: ByteArray? = null
+                    var datosJson: String? = null
+
+                    try {
+                        val multipart = call.receiveMultipart()
+                        multipart.forEachPart { part ->
+                            when (part) {
+                                is PartData.FileItem -> {
+                                    if (part.name == "foto") {
+                                        fotoBytes = withContext(Dispatchers.IO) { part.streamProvider().readBytes() }
+                                    }
+                                }
+                                is PartData.FormItem -> {
+                                    if (part.name == "datos") datosJson = part.value
+                                }
+                                else -> {}
+                            }
+                            part.dispose()
+                        }
                     } catch (e: Exception) {
-                        return@post call.respond(HttpStatusCode.BadRequest, MensajeResponse("Cuerpo inválido: ${e.localizedMessage}"))
+                        return@post call.respond(HttpStatusCode.BadRequest, MensajeResponse("Multipart inválido: ${e.localizedMessage}"))
+                    }
+
+                    val req = try {
+                        Json.decodeFromString<CrearCasoRequest>(
+                            datosJson ?: return@post call.respond(HttpStatusCode.BadRequest, MensajeResponse("Campo 'datos' requerido"))
+                        )
+                    } catch (e: Exception) {
+                        return@post call.respond(HttpStatusCode.BadRequest, MensajeResponse("datos inválido: ${e.localizedMessage}"))
                     }
 
                     if (!ObjectId.isValid(req.admin_officer_id))
@@ -127,6 +157,14 @@ fun Application.configureCasosRouting() {
                     if (agentesInvalidos.isNotEmpty())
                         return@post call.respond(HttpStatusCode.BadRequest, MensajeResponse("IDs de agentes inválidos: $agentesInvalidos"))
 
+                    val photoUrl: String? = fotoBytes?.takeIf { it.isNotEmpty() }?.let { bytes ->
+                        try {
+                            withContext(Dispatchers.IO) { FirebaseStorageService.uploadImage(bytes) }
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
+
                     val locationLabel = req.missing_person.last_known_location?.let { ub ->
                         GeocodingUtil.reverseGeocode(lat = ub.latitud, lon = ub.longitud)
                     }
@@ -134,7 +172,7 @@ fun Application.configureCasosRouting() {
                     val missingPersonDoc = Document("name", req.missing_person.name)
                         .append("description", req.missing_person.description)
                         .append("age", req.missing_person.age)
-                        .append("image", req.missing_person.image)
+                        .append("image", photoUrl)
                         .append("last_seen_date", req.missing_person.last_seen_date)
                         .append("location_description", req.missing_person.location_description)
                         .append("location_label", locationLabel)
