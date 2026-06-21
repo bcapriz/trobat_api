@@ -47,6 +47,7 @@ fun initFirebase() {
 }
 
 fun Application.module() {
+    initFirebase()
     val authService = AuthServiceImpl(usuarios, oficiales)
 
     configureHTTP()

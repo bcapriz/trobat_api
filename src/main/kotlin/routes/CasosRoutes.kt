@@ -318,9 +318,15 @@ fun Application.configureCasosRouting() {
 }
 
 private fun Document.toCasoResponse(): CasoResponse {
-    val missingDoc = get("missing_person", Document::class.java) ?: Document()
-    val contactDoc = get("external_contact", Document::class.java) ?: Document()
+    // Compatibilidad con documentos antiguos (campo en español) y nuevos (en inglés)
+    val missingDoc = get("missing_person", Document::class.java)
+        ?: get("desaparecido", Document::class.java)
+        ?: Document()
+    val contactDoc = get("external_contact", Document::class.java)
+        ?: get("representante_externo", Document::class.java)
+        ?: Document()
     val locDoc = missingDoc.get("last_known_location", Document::class.java)
+        ?: missingDoc.get("ultima_ubicacion", Document::class.java)
 
     val location = locDoc?.let {
         val coords = it.getList("coordinates", Number::class.java) ?: emptyList()
@@ -328,15 +334,31 @@ private fun Document.toCasoResponse(): CasoResponse {
     }
 
     val assignedAgents = try {
-        getList("assigned_agents", ObjectId::class.java)?.map { it.toHexString() } ?: emptyList()
+        getList("assigned_agents", ObjectId::class.java)?.map { it.toHexString() }
+            ?: getList("agentes_asignados", ObjectId::class.java)?.map { it.toHexString() }
+            ?: emptyList()
     } catch (e: Exception) {
-        getList("assigned_agents", String::class.java) ?: emptyList()
+        getList("assigned_agents", String::class.java)
+            ?: getList("agentes_asignados", String::class.java)
+            ?: emptyList()
     }
 
     val adminOfficerId = try {
         getObjectId("admin_officer_id").toHexString()
     } catch (e: Exception) {
-        getString("admin_officer_id") ?: ""
+        try {
+            getObjectId("oficial_administrador_id").toHexString()
+        } catch (e2: Exception) {
+            getString("admin_officer_id") ?: getString("oficial_administrador_id") ?: ""
+        }
+    }
+
+    val status = when (val raw = getString("status") ?: getString("estado")) {
+        "active_investigation", "resolved", "closed" -> raw
+        "investigacion_activa", "suspendido" -> "active_investigation"
+        "resuelto" -> "resolved"
+        "cerrado" -> "closed"
+        else -> "active_investigation"
     }
 
     return CasoResponse(
@@ -344,24 +366,26 @@ private fun Document.toCasoResponse(): CasoResponse {
         admin_officer_id = adminOfficerId,
         assigned_agents = assignedAgents,
         missing_person = Desaparecido(
-            name = missingDoc.getString("name") ?: "",
-            description = missingDoc.getString("description") ?: "",
-            age = missingDoc.getInteger("age") ?: 0,
-            image = missingDoc.getString("image") ?: "",
-            last_seen_date = missingDoc.getString("last_seen_date") ?: "",
-            location_description = missingDoc.getString("location_description") ?: "",
+            name = missingDoc.getString("name") ?: missingDoc.getString("nombre") ?: "",
+            description = missingDoc.getString("description") ?: missingDoc.getString("descripcion") ?: "",
+            age = missingDoc.getInteger("age") ?: missingDoc.getInteger("edad") ?: 0,
+            image = missingDoc.getString("image") ?: missingDoc.getString("foto") ?: "",
+            last_seen_date = missingDoc.getString("last_seen_date") ?: missingDoc.getString("fecha_ultima_vez_visto") ?: "",
+            location_description = missingDoc.getString("location_description") ?: missingDoc.getString("descripcion_ubicacion") ?: "",
             last_known_location = location,
             location_label = missingDoc.getString("location_label")
         ),
         external_contact = RepresentanteExterno(
-            name = contactDoc.getString("name") ?: "",
+            name = contactDoc.getString("name") ?: contactDoc.getString("nombre") ?: "",
             email = contactDoc.getString("email") ?: "",
-            phone = contactDoc.getString("phone") ?: ""
+            phone = contactDoc.getString("phone") ?: contactDoc.getString("telefono") ?: ""
         ),
-        status = getString("status") ?: "active_investigation",
-        total_reports = getInteger("total_reports") ?: 0,
+        status = status,
+        total_reports = getInteger("total_reports") ?: getInteger("total_reportes") ?: 0,
         created_at = getDate("created_at")?.toInstant()?.toString()
+            ?: getDate("fecha_creacion")?.toInstant()?.toString()
             ?: get("created_at")?.toString()
+            ?: get("fecha_creacion")?.toString()
             ?: ""
     )
 }

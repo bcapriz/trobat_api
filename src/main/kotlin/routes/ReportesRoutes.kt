@@ -238,15 +238,25 @@ fun Application.configureReportesRouting() {
 }
 
 private fun Document.toReporteCasoResponse(): ReporteCasoResponse {
-    val locDoc = get("location", Document::class.java) ?: Document()
+    val locDoc = get("location", Document::class.java)
+        ?: get("ubicacion", Document::class.java)
+        ?: Document()
     val coords = locDoc.getList("coordinates", Number::class.java) ?: emptyList()
-    val securityDoc = get("security_metadata", Document::class.java) ?: Document()
-    val contactDoc = get("contact_info", Document::class.java) ?: Document()
+    val securityDoc = get("security_metadata", Document::class.java)
+        ?: get("metadata_seguridad", Document::class.java)
+        ?: Document()
+    val contactDoc = get("contact_info", Document::class.java)
+        ?: get("datos_contacto", Document::class.java)
+        ?: Document()
 
     val caseId = try {
         getObjectId("case_id").toHexString()
     } catch (e: Exception) {
-        getString("case_id") ?: ""
+        try {
+            getObjectId("caso_id").toHexString()
+        } catch (e2: Exception) {
+            getString("case_id") ?: getString("caso_id") ?: ""
+        }
     }
 
     return ReporteCasoResponse(
@@ -260,15 +270,17 @@ private fun Document.toReporteCasoResponse(): ReporteCasoResponse {
         timestamp = getDate("timestamp")?.toInstant()?.toString()
             ?: get("timestamp")?.toString()
             ?: "",
-        police_priority = getBoolean("police_priority") ?: false,
-        description = getString("description") ?: "",
-        photo_url = getString("photo_url"),
-        security_metadata = SecurityMetadata(anonymous = securityDoc.getBoolean("anonymous") ?: true),
+        police_priority = getBoolean("police_priority") ?: getBoolean("prioridad_policial") ?: false,
+        description = getString("description") ?: getString("descripcion") ?: "",
+        photo_url = getString("photo_url") ?: getString("foto_url"),
+        security_metadata = SecurityMetadata(
+            anonymous = securityDoc.getBoolean("anonymous") ?: securityDoc.getBoolean("anonimo") ?: true
+        ),
         contact_info = ContactInfo(
-            name = contactDoc.getString("name"),
-            phone = contactDoc.getString("phone"),
+            name = contactDoc.getString("name") ?: contactDoc.getString("nombre"),
+            phone = contactDoc.getString("phone") ?: contactDoc.getString("telefono"),
             email = contactDoc.getString("email")
         ),
-        validated = getBoolean("validated") ?: false
+        validated = getBoolean("validated") ?: getBoolean("validado") ?: false
     )
 }
