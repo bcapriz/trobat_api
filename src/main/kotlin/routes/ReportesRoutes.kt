@@ -179,6 +179,33 @@ fun Application.configureReportesRouting() {
                     }
                 }
 
+                // --- SOLO OFICIAL: asignar prioridad ---
+                patch("/{id}/prioridad") {
+                    if (!call.verificarRol("oficial")) return@patch
+
+                    val id = call.parameters["id"]
+                        ?: return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("ID requerido"))
+                    if (!ObjectId.isValid(id))
+                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("ID inválido"))
+
+                    val req = try {
+                        call.receive<PriorizarReporteRequest>()
+                    } catch (e: Exception) {
+                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("Cuerpo inválido"))
+                    }
+
+                    val result = reportes.updateOne(
+                        Filters.eq("_id", ObjectId(id)),
+                        Updates.set("police_priority", req.police_priority)
+                    )
+
+                    if (result.matchedCount == 0L) call.respond(HttpStatusCode.NotFound, MensajeResponse("Reporte no encontrado"))
+                    else {
+                        val estado = if (req.police_priority) "priorizado" else "sin prioridad"
+                        call.respond(MensajeResponse("Reporte $estado exitosamente"))
+                    }
+                }
+
                 // --- SOLO OFICIAL: validar reporte ---
                 patch("/{id}/validar") {
                     if (!call.verificarRol("oficial")) return@patch

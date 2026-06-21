@@ -162,6 +162,54 @@ fun Application.configureCasosRouting() {
                     call.respond(HttpStatusCode.Created, CrearCasoResponse(id = newId, message = "Caso creado exitosamente"))
                 }
 
+                patch("/{id}") {
+                    if (!call.verificarRol("oficial")) return@patch
+
+                    val id = call.parameters["id"]
+                        ?: return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("ID requerido"))
+                    if (!ObjectId.isValid(id))
+                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("ID inválido"))
+
+                    val req = try {
+                        call.receive<EditarCasoRequest>()
+                    } catch (e: Exception) {
+                        return@patch call.respond(HttpStatusCode.BadRequest, MensajeResponse("Cuerpo inválido: ${e.localizedMessage}"))
+                    }
+
+                    val locationLabel = req.missing_person.last_known_location?.let { ub ->
+                        GeocodingUtil.reverseGeocode(lat = ub.latitud, lon = ub.longitud)
+                    }
+
+                    val missingPersonDoc = Document("name", req.missing_person.name)
+                        .append("description", req.missing_person.description)
+                        .append("age", req.missing_person.age)
+                        .append("image", req.missing_person.image)
+                        .append("last_seen_date", req.missing_person.last_seen_date)
+                        .append("location_description", req.missing_person.location_description)
+                        .append("location_label", locationLabel)
+                    req.missing_person.last_known_location?.let { ub ->
+                        missingPersonDoc.append(
+                            "last_known_location",
+                            Document("type", ub.type).append("coordinates", ub.coordinates)
+                        )
+                    }
+
+                    val contactDoc = Document("name", req.external_contact.name)
+                        .append("email", req.external_contact.email)
+                        .append("phone", req.external_contact.phone)
+
+                    val result = casos.updateOne(
+                        Filters.eq("_id", ObjectId(id)),
+                        Updates.combine(
+                            Updates.set("missing_person", missingPersonDoc),
+                            Updates.set("external_contact", contactDoc)
+                        )
+                    )
+
+                    if (result.matchedCount == 0L) call.respond(HttpStatusCode.NotFound, MensajeResponse("Caso no encontrado"))
+                    else call.respond(MensajeResponse("Caso actualizado exitosamente"))
+                }
+
                 patch("/{id}/estado") {
                     if (!call.verificarRol("oficial")) return@patch
 

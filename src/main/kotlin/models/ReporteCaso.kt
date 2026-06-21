@@ -31,6 +31,11 @@ data class ValidarReporteRequest(
 )
 
 @Serializable
+data class PriorizarReporteRequest(
+    val police_priority: Boolean
+)
+
+@Serializable
 data class ReporteCasoResponse(
     val id: String,
     val case_id: String,
