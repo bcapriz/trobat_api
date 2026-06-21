@@ -1,0 +1,41 @@
+val kotlin_version: String by project
+val logback_version: String by project
+
+plugins {
+    kotlin("jvm") version "1.9.22"
+    id("io.ktor.plugin") version "2.3.12"
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.22"
+}
+
+group = "com.trobatapp"
+version = "0.0.1"
+
+kotlin {
+    jvmToolchain(21)
+}
+
+application {
+    mainClass.set("io.ktor.server.netty.EngineMain")
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("io.ktor:ktor-server-core-jvm:2.3.10")
+    implementation("io.ktor:ktor-server-config-yaml:2.3.10")
+    implementation("io.ktor:ktor-server-netty-jvm:2.3.10")
+    implementation("io.ktor:ktor-server-content-negotiation-jvm:2.3.10")
+    implementation("io.ktor:ktor-serialization-kotlinx-json-jvm:2.3.10")
+    implementation("io.ktor:ktor-server-cors-jvm:2.3.10")
+    implementation("io.ktor:ktor-server-auth-jvm:2.3.10")
+    implementation("io.ktor:ktor-server-auth-jwt-jvm:2.3.10")
+    implementation("ch.qos.logback:logback-classic:1.4.14")
+    implementation("org.mongodb:mongodb-driver-kotlin-coroutine:5.0.0")
+    implementation("org.mindrot:jbcrypt:0.4")
+    implementation("com.google.firebase:firebase-admin:9.3.0")
+
+    testImplementation("io.ktor:ktor-server-tests-jvm:2.3.10")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.22")
+}
