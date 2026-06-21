@@ -50,7 +50,7 @@ fun initFirebase() {
             .setStorageBucket(bucket)
             .build()
         FirebaseApp.initializeApp(options)
-    } catch (_: Exception) {
+    } catch (e: Exception) {
         // Firebase no disponible; las fotos no se subirán
     }
 }

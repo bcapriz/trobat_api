@@ -1,7 +1,5 @@
 package com.trobatapp.service
 
-import com.google.cloud.storage.BlobId
-import com.google.cloud.storage.BlobInfo
 import com.google.firebase.cloud.StorageClient
 import java.net.URLEncoder
 import java.util.UUID
