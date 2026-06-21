@@ -39,7 +39,10 @@ fun Application.configureReportesRouting() {
 
                     try {
                         val lista = reportes
-                            .find(Filters.eq("case_id", ObjectId(id)))
+                            .find(Filters.or(
+                                Filters.eq("case_id", ObjectId(id)),
+                                Filters.eq("caso_id", ObjectId(id))
+                            ))
                             .toList()
                             .map { it.toReporteCasoResponse() }
                         call.respond(lista)
@@ -141,7 +144,10 @@ fun Application.configureReportesRouting() {
                     val page = call.request.queryParameters["page"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
                     val limit = call.request.queryParameters["limit"]?.toIntOrNull()?.coerceIn(1, 100) ?: 20
                     val filtro = if (caseId != null && ObjectId.isValid(caseId))
-                        Filters.eq("case_id", ObjectId(caseId))
+                        Filters.or(
+                            Filters.eq("case_id", ObjectId(caseId)),
+                            Filters.eq("caso_id", ObjectId(caseId))
+                        )
                     else
                         Document()
 
